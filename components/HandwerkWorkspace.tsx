@@ -15,7 +15,7 @@ async function decodeWithNativeStream(bytes: Uint8Array) {
     throw new Error('Native DecompressionStream ist in diesem Browser nicht verfügbar.');
   }
 
-  const stream = new Response(bytes).body;
+  const stream = new Response(bytes as BodyInit).body;
   if (!stream) {
     throw new Error('Compressed HTML stream could not be created.');
   }
