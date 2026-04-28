@@ -1,15 +1,65 @@
 'use client';
 
-import { gunzipSync } from 'fflate';
+import { decompressSync, gunzipSync, zlibSync } from 'fflate';
 import { useEffect, useRef } from 'react';
 import { htmlGzipBase64Parts } from '../app/html-data';
 
-function decodeHtml(parts: readonly string[]) {
+function base64ToBytes(parts: readonly string[]) {
   const base64 = parts.join('');
   const binary = atob(base64);
-  const gzipped = Uint8Array.from(binary, (char) => char.charCodeAt(0));
-  const unzipped = gunzipSync(gzipped);
-  return new TextDecoder().decode(unzipped);
+  return Uint8Array.from(binary, (char) => char.charCodeAt(0));
+}
+
+async function decodeWithNativeStream(bytes: Uint8Array) {
+  if (typeof DecompressionStream === 'undefined') {
+    throw new Error('Native DecompressionStream ist in diesem Browser nicht verfügbar.');
+  }
+
+  const stream = new Response(bytes).body;
+  if (!stream) {
+    throw new Error('Compressed HTML stream could not be created.');
+  }
+
+  const decompressedStream = stream.pipeThrough(new DecompressionStream('gzip'));
+  return await new Response(decompressedStream).text();
+}
+
+async function decodeHtml(parts: readonly string[]) {
+  const bytes = base64ToBytes(parts);
+  const decoder = new TextDecoder();
+
+  try {
+    return await decodeWithNativeStream(bytes);
+  } catch (nativeError) {
+    console.warn('Native gzip decode failed, trying fflate fallbacks.', nativeError);
+  }
+
+  const attempts: Array<() => Uint8Array> = [
+    () => gunzipSync(bytes),
+    () => decompressSync(bytes),
+    () => zlibSync(bytes),
+  ];
+
+  const errors: string[] = [];
+
+  for (const attempt of attempts) {
+    try {
+      return decoder.decode(attempt());
+    } catch (error) {
+      errors.push(error instanceof Error ? error.message : String(error));
+    }
+  }
+
+  throw new Error(`HTML-Daten konnten nicht entpackt werden: ${errors.join(' | ')}`);
+}
+
+function escapeHtml(value: string) {
+  return value
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;')
+    .replaceAll('"', '&quot;')
+    .replaceAll("'", '&#039;');
 }
 
 function showWorkspaceError(target: HTMLDivElement, error: unknown) {
@@ -19,7 +69,7 @@ function showWorkspaceError(target: HTMLDivElement, error: unknown) {
       <div style="max-width:720px;background:white;border-radius:18px;padding:28px;box-shadow:0 18px 50px rgba(15,23,42,.12);">
         <h1 style="margin:0 0 12px;font-size:22px;">Dialekta Handwerk Workspace konnte nicht geladen werden</h1>
         <p style="margin:0 0 16px;line-height:1.55;color:#4b5563;">Der Build ist online, aber beim Starten der Oberfläche ist im Browser ein Fehler aufgetreten.</p>
-        <pre style="white-space:pre-wrap;background:#f3f4f6;border-radius:12px;padding:14px;font-size:13px;">${message}</pre>
+        <pre style="white-space:pre-wrap;background:#f3f4f6;border-radius:12px;padding:14px;font-size:13px;">${escapeHtml(message)}</pre>
       </div>
     </div>`;
 }
@@ -52,7 +102,7 @@ export default function HandwerkWorkspace() {
       if (!rootRef.current) return;
 
       try {
-        const html = decodeHtml(htmlGzipBase64Parts);
+        const html = await decodeHtml(htmlGzipBase64Parts);
         if (!active || !rootRef.current) return;
 
         const doc = new DOMParser().parseFromString(html, 'text/html');
