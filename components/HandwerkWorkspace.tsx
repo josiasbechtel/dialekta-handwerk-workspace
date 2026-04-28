@@ -1,6 +1,6 @@
 'use client';
 
-import { decompressSync, gunzipSync, zlibSync } from 'fflate';
+import { decompressSync } from 'fflate';
 import { useEffect, useRef } from 'react';
 import { htmlGzipBase64Parts } from '../app/html-data';
 
@@ -10,7 +10,12 @@ function base64ToBytes(parts: readonly string[]) {
   return Uint8Array.from(binary, (char) => char.charCodeAt(0));
 }
 
-async function decodeWithNativeStream(bytes: Uint8Array) {
+function looksLikeHtml(text: string) {
+  const trimmed = text.trimStart().toLowerCase();
+  return trimmed.startsWith('<!doctype html') || trimmed.startsWith('<html') || trimmed.includes('<body');
+}
+
+async function nativeGunzipToBytes(bytes: Uint8Array) {
   if (typeof DecompressionStream === 'undefined') {
     throw new Error('Native DecompressionStream ist in diesem Browser nicht verfügbar.');
   }
@@ -21,36 +26,38 @@ async function decodeWithNativeStream(bytes: Uint8Array) {
   }
 
   const decompressedStream = stream.pipeThrough(new DecompressionStream('gzip'));
-  return await new Response(decompressedStream).text();
+  const buffer = await new Response(decompressedStream).arrayBuffer();
+  return new Uint8Array(buffer);
 }
 
 async function decodeHtml(parts: readonly string[]) {
-  const bytes = base64ToBytes(parts);
   const decoder = new TextDecoder();
-
-  try {
-    return await decodeWithNativeStream(bytes);
-  } catch (nativeError) {
-    console.warn('Native gzip decode failed, trying fflate fallbacks.', nativeError);
-  }
-
-  const attempts: Array<() => Uint8Array> = [
-    () => gunzipSync(bytes),
-    () => decompressSync(bytes),
-    () => zlibSync(bytes),
-  ];
-
+  let bytes = base64ToBytes(parts);
   const errors: string[] = [];
 
-  for (const attempt of attempts) {
+  for (let round = 0; round < 4; round += 1) {
+    const text = decoder.decode(bytes);
+    if (looksLikeHtml(text)) return text;
+
     try {
-      return decoder.decode(attempt());
+      bytes = await nativeGunzipToBytes(bytes);
+      continue;
     } catch (error) {
       errors.push(error instanceof Error ? error.message : String(error));
     }
+
+    try {
+      bytes = decompressSync(bytes);
+      continue;
+    } catch (error) {
+      errors.push(error instanceof Error ? error.message : String(error));
+    }
+
+    break;
   }
 
-  throw new Error(`HTML-Daten konnten nicht entpackt werden: ${errors.join(' | ')}`);
+  const preview = decoder.decode(bytes.slice(0, 120));
+  throw new Error(`HTML-Daten konnten nicht vollständig entpackt werden. Vorschau: ${preview}. Fehler: ${errors.join(' | ')}`);
 }
 
 function escapeHtml(value: string) {
