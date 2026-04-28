@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useRef } from 'react';
-import { htmlGzipBase64Parts } from '@/app/html-data';
+import { htmlGzipBase64Parts } from '../app/html-data';
 
 async function decompressHtml(parts: string[]) {
   const base64 = parts.join('');
