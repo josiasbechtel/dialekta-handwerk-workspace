@@ -2,7 +2,9 @@
 
 import { useEffect, useRef } from 'react';
 
-const TEMPLATE_URL = '/templates/Werstatt_Workspace_v9.html';
+type HandwerkWorkspaceProps = {
+  initialHtml: string;
+};
 
 function escapeHtml(value: string) {
   return value
@@ -19,7 +21,7 @@ function showWorkspaceError(target: HTMLDivElement, error: unknown) {
     <div style="min-height:100vh;display:flex;align-items:center;justify-content:center;background:#f6f8fb;font-family:Arial,sans-serif;color:#111827;padding:24px;">
       <div style="max-width:760px;background:white;border-radius:18px;padding:28px;box-shadow:0 18px 50px rgba(15,23,42,.12);">
         <h1 style="margin:0 0 12px;font-size:22px;">Dialekta Handwerk Workspace konnte nicht geladen werden</h1>
-        <p style="margin:0 0 16px;line-height:1.55;color:#4b5563;">Die App ist online, aber die statische Vorlagendatei konnte nicht geladen werden.</p>
+        <p style="margin:0 0 16px;line-height:1.55;color:#4b5563;">Die App ist online, aber beim Initialisieren der Next.js-Oberfläche ist ein Fehler aufgetreten.</p>
         <pre style="white-space:pre-wrap;background:#f3f4f6;border-radius:12px;padding:14px;font-size:13px;">${escapeHtml(message)}</pre>
       </div>
     </div>`;
@@ -43,7 +45,7 @@ function appendExternalScript(src: string) {
   });
 }
 
-export default function HandwerkWorkspace() {
+export default function HandwerkWorkspace({ initialHtml }: HandwerkWorkspaceProps) {
   const rootRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -53,19 +55,13 @@ export default function HandwerkWorkspace() {
       if (!rootRef.current) return;
 
       try {
-        const response = await fetch(TEMPLATE_URL, { cache: 'no-store' });
-        if (!response.ok) {
-          throw new Error(`Vorlage nicht gefunden: ${TEMPLATE_URL} (${response.status})`);
-        }
-
-        const html = await response.text();
-        if (!html.trimStart().startsWith('<')) {
-          throw new Error(`Vorlage ist kein HTML. Erste Zeichen: ${html.slice(0, 80)}`);
+        if (!initialHtml.trimStart().startsWith('<')) {
+          throw new Error(`Vorlage ist kein HTML. Erste Zeichen: ${initialHtml.slice(0, 80)}`);
         }
 
         if (!active || !rootRef.current) return;
 
-        const doc = new DOMParser().parseFromString(html, 'text/html');
+        const doc = new DOMParser().parseFromString(initialHtml, 'text/html');
 
         doc.querySelectorAll('link[rel="stylesheet"]').forEach((link) => {
           const href = link.getAttribute('href');
@@ -118,7 +114,7 @@ export default function HandwerkWorkspace() {
       active = false;
       if (rootRef.current) rootRef.current.innerHTML = '';
     };
-  }, []);
+  }, [initialHtml]);
 
   return <div ref={rootRef} />;
 }
