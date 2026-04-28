@@ -42,7 +42,7 @@ export default function HandwerkWorkspace() {
     let active = true;
 
     async function mountWorkspace() {
-      const html = await decompressHtml(htmlGzipBase64Parts);
+      const html = await decompressHtml([...htmlGzipBase64Parts]);
       if (!active || !rootRef.current) return;
 
       const doc = new DOMParser().parseFromString(html, 'text/html');
