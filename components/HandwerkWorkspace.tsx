@@ -1,10 +1,8 @@
 'use client';
 
+import { gunzipSync } from 'fflate';
 import { useEffect, useRef } from 'react';
-
-type HandwerkWorkspaceProps = {
-  initialHtml: string;
-};
+import { workspaceTemplateGzipBase64 } from '../app/clean-template';
 
 function escapeHtml(value: string) {
   return value
@@ -13,6 +11,12 @@ function escapeHtml(value: string) {
     .replaceAll('>', '&gt;')
     .replaceAll('"', '&quot;')
     .replaceAll("'", '&#039;');
+}
+
+function decodeWorkspaceHtml() {
+  const binary = atob(workspaceTemplateGzipBase64);
+  const bytes = Uint8Array.from(binary, (char) => char.charCodeAt(0));
+  return new TextDecoder().decode(gunzipSync(bytes));
 }
 
 function showWorkspaceError(target: HTMLDivElement, error: unknown) {
@@ -45,7 +49,7 @@ function appendExternalScript(src: string) {
   });
 }
 
-export default function HandwerkWorkspace({ initialHtml }: HandwerkWorkspaceProps) {
+export default function HandwerkWorkspace() {
   const rootRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -55,6 +59,7 @@ export default function HandwerkWorkspace({ initialHtml }: HandwerkWorkspaceProp
       if (!rootRef.current) return;
 
       try {
+        const initialHtml = decodeWorkspaceHtml();
         if (!initialHtml.trimStart().startsWith('<')) {
           throw new Error(`Vorlage ist kein HTML. Erste Zeichen: ${initialHtml.slice(0, 80)}`);
         }
@@ -114,7 +119,7 @@ export default function HandwerkWorkspace({ initialHtml }: HandwerkWorkspaceProp
       active = false;
       if (rootRef.current) rootRef.current.innerHTML = '';
     };
-  }, [initialHtml]);
+  }, []);
 
   return <div ref={rootRef} />;
 }
