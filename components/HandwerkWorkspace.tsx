@@ -32,7 +32,7 @@ async function nativeGunzipToBytes(bytes: Uint8Array) {
 
 async function decodeHtml(parts: readonly string[]) {
   const decoder = new TextDecoder();
-  let bytes = base64ToBytes(parts);
+  let bytes: Uint8Array = base64ToBytes(parts);
   const errors: string[] = [];
 
   for (let round = 0; round < 4; round += 1) {
@@ -47,7 +47,7 @@ async function decodeHtml(parts: readonly string[]) {
     }
 
     try {
-      bytes = decompressSync(bytes);
+      bytes = new Uint8Array(decompressSync(bytes));
       continue;
     } catch (error) {
       errors.push(error instanceof Error ? error.message : String(error));
